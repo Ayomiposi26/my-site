@@ -30,7 +30,7 @@ export const profile = {
    */
   funFacts:[
     "I enjoy photography and videography.",
-    ""I play the drums and serve on my church's media team.",
+    "I play the drums and serve on my church's media team.",
     "I prefer cold weather.",
   ],
 
