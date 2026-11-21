@@ -43,11 +43,10 @@ export default async function CausalityPage() {
           ? `Changing ${ctx.xLabel} would change ${ctx.yLabel}`
           : `Changing ${ctx.xLabel} would not change ${ctx.yLabel}`}
       </h1>
-      {/* TODO(yours): one sentence, your words, on what this service does. */}
       <p className="mt-4 max-w-prose text-muted">
-        My auditor reads a dataset and the story behind it, decides which causal structure
-        produced the data, and says whether the pattern is a cause or a coincidence. Every number
-        on this page comes from the same saved answer my API gave.
+        This service reads a choice, a third variable, and an outcome, then uses the story about
+        that third variable to say whether the choice actually moves the outcome. The numbers
+        below are the answer the API just saved, so the page and the API cannot disagree.
       </p>
 
       <section className="mt-10">
@@ -93,13 +92,11 @@ export default async function CausalityPage() {
           x1={String(ctx.x1)}
           yLabel={String(ctx.yLabel)}
         />
-        {/* TODO(yours): one or two sentences a manager could read: what the
-            comparison shows, and why the story about the third variable
-            decides which row to trust (Stations 4.4 and 4.5). */}
         <p className="mt-3 max-w-prose text-muted">
-          The top row compares the two groups over all the data. The rows below compare them
-          within each level of {String(ctx.zLabel)}. Which row to trust depends on the story about{" "}
-          {String(ctx.zLabel)}, not on which gap is bigger.
+          The top row is the raw gap between {String(ctx.x0)} and {String(ctx.x1)}. The rows
+          under it are that same gap inside each level of {String(ctx.zLabel)}. Trust the split
+          only when {String(ctx.zLabel)} is a common cause; if it is how the choice works, or a
+          result of both sides, splitting the data hides the real effect or invents one.
         </p>
       </section>
 
@@ -111,12 +108,10 @@ export default async function CausalityPage() {
           alt={`DAG of ${STRUCTURE_NAMES[structure] ?? structure}: X is ${ctx.xLabel}, Z is ${ctx.zLabel}, Y is ${ctx.yLabel}.`}
           className="mt-3 w-full max-w-md rounded-lg border border-line bg-white p-3"
         />
-        {/* TODO(yours): one sentence connecting the picture to the verdict:
-            which arrow (or missing arrow) makes it causal or not. */}
         <p className="mt-3 max-w-prose text-muted">
           {answer.causal
-            ? `Changing ${ctx.xLabel} changes ${ctx.yLabel}: an arrow runs from ${ctx.xLabel} to ${ctx.yLabel}, directly or through ${ctx.zLabel}.`
-            : `The gap between the ${ctx.xLabel} groups does not come from an arrow from ${ctx.xLabel} to ${ctx.yLabel}. It comes from ${ctx.zLabel}.`}
+            ? `An arrow reaches ${ctx.yLabel} from ${ctx.xLabel}, either straight across or through ${ctx.zLabel}, so changing ${ctx.xLabel} changes ${ctx.yLabel}.`
+            : `No arrow runs from ${ctx.xLabel} to ${ctx.yLabel}. The gap is coming from ${ctx.zLabel}, so changing ${ctx.xLabel} would leave ${ctx.yLabel} alone.`}
         </p>
       </section>
     </main>

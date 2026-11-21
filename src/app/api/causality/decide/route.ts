@@ -49,7 +49,18 @@ function classifyStructure(
   naive: number,
   stratified: number
 ): Structure | null {
-  return null;
+  const real = (effect: number) => Math.abs(effect) >= VISIBLE;
+
+  if (facts.zTiming === "before-x") {
+    return facts.zInfluencesX ? "fork" : "direct";
+  }
+  
+  if (facts.zTiming === "after-x" && !facts.zInfluencesX) {
+    if (real(naive) && !real(stratified)) return "pipe";
+    if (!real(naive) && real(stratified)) return "collider";
+  }
+  
+  return null; 
 }
 
 export async function POST(req: Request) {
