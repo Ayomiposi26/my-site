@@ -57,9 +57,10 @@ export async function saveLatest(
   if (!client) {
     throw new Error("Supabase env vars not set. See .env.example and the README.");
   }
-  const { error } = await client
-    .from("reasoning_latest")
-    .upsert({ type, problem, answer, updated_at: new Date().toISOString() });
+  const { error } = await client.from("reasoning_latest").upsert(
+    { type, problem, answer, updated_at: new Date().toISOString() },
+    { onConflict: "type" }
+  );
   if (error) {
     throw new Error(`Could not save the latest ${type}: ${error.message}`);
   }

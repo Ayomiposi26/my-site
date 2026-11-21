@@ -1,74 +1,115 @@
 import { NextResponse } from "next/server";
-import { notBuiltYet } from "@/lib/not-built-yet";
 import { saveLatest, type ProblemType } from "@/lib/reasoning-store";
 
-/**
- * ── Challenge 2, step 4: the brain ────────────────────────────────────────
- * Why this route exists: this is the decision endpoint. The grader POSTs a
- * JSON problem here (one of three types) and your code must answer it,
- * correctly, in under 10 seconds, with no human involved. Everything Lane 2
- * taught your brain, this route teaches your website.
- *
- * The three TODO blocks below map one-to-one onto stations you have already
- * passed. The build guide (course book, end of Lane 2) walks through each
- * one and shows the finished code; the wire contract with example problems
- * lives on the Challenge 2 page.
- *
- * The plumbing (parse, save, respond) is already written. Until you fill in
- * an answer, unanswered problems return 501: honestly unfinished, never
- * faked.
- */
-export async function POST(req: Request) {
-  const problem = await req.json().catch(() => null);
-  if (!problem || typeof problem.type !== "string") {
-    return NextResponse.json(
-      { error: "expected a JSON problem with a `type` field" },
-      { status: 400 }
+/** Keep each decision inside the challenge's time budget. */
+export const maxDuration = 10;
+
+const PROBLEM_TYPES = ["syllogism", "plausibility", "bernoulli"] as const;
+
+const SYLLOGISM_FORMS = {
+  A: { verdict: "valid" },
+  "not-B": { verdict: "valid" },
+  B: { verdict: "invalid", fallacy: "affirming the consequent" },
+  "not-A": { verdict: "invalid", fallacy: "denying the antecedent" },
+} as const;
+
+type SyllogismAsserts = keyof typeof SYLLOGISM_FORMS;
+
+function badRequest(error: string) {
+  return NextResponse.json({ error }, { status: 400 });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function solveSyllogism(problem: Record<string, unknown>) {
+  const observation = problem.observation;
+  if (!isRecord(observation)) {
+    return badRequest("syllogism problem needs an observation object");
+  }
+  const asserts = observation.asserts;
+  if (asserts !== "A" && asserts !== "not-B" && asserts !== "B" && asserts !== "not-A") {
+    return badRequest(
+      'syllogism observation.asserts must be "A", "not-B", "B", or "not-A"'
+    );
+  }
+  return { ...SYLLOGISM_FORMS[asserts as SyllogismAsserts] };
+}
+
+function solvePlausibility(problem: Record<string, unknown>) {
+  const baseRate = finiteNumber(problem.baseRate);
+  const hitRate = finiteNumber(problem.hitRate);
+  const falseAlarmRate = finiteNumber(problem.falseAlarmRate);
+  if (baseRate === null || hitRate === null || falseAlarmRate === null) {
+    return badRequest(
+      "plausibility problem needs finite numeric baseRate, hitRate, and falseAlarmRate"
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let answer: Record<string, any> | undefined;
+  const trueFlags = baseRate * hitRate;
+  const falseFlags = (1 - baseRate) * falseAlarmRate;
+  const flagged = trueFlags + falseFlags;
+  if (!Number.isFinite(flagged) || flagged === 0) {
+    return badRequest("plausibility rates do not define a posterior");
+  }
+  const posterior = trueFlags / flagged;
+  if (!Number.isFinite(posterior)) {
+    return badRequest("plausibility rates do not define a posterior");
+  }
+  return { posterior };
+}
 
-  if (problem.type === "syllogism") {
-    // TODO(Challenge 2, step 4a): Station 2.1's truth table as a lookup.
-    // problem.observation.asserts tells you which canonical form this is:
-    //   "A"     -> valid   (affirming the antecedent)
-    //   "not-B" -> valid   (denying the consequent)
-    //   "B"     -> invalid, fallacy: "affirming the consequent"
-    //   "not-A" -> invalid, fallacy: "denying the antecedent"
-    // Build a four-row lookup object and set:
-    // answer = { verdict: ..., fallacy: ... (only when invalid) }
+function solveBernoulli(problem: Record<string, unknown>) {
+  const theta = finiteNumber(problem.theta);
+  const payoffs = problem.payoffs;
+  if (theta === null || !isRecord(payoffs)) {
+    return badRequest("bernoulli problem needs a finite theta and a payoffs object");
+  }
+  const onSuccess = finiteNumber(payoffs.onSuccess);
+  const onFailure = finiteNumber(payoffs.onFailure);
+  if (onSuccess === null || onFailure === null) {
+    return badRequest("bernoulli payoffs.onSuccess and payoffs.onFailure must be finite numbers");
+  }
+  if (problem.probabilityOf !== 0 && problem.probabilityOf !== 1) {
+    return badRequest("bernoulli probabilityOf must be 0 or 1");
   }
 
-  if (problem.type === "plausibility") {
-    // TODO(Challenge 2, step 4b): Station 2.3's counting method. Imagine
-    // N = 10,000 cases (any N works, it cancels in the division; it is
-    // here so the names tell the truth: these are counts of cases).
-    // From problem.baseRate, problem.hitRate, problem.falseAlarmRate:
-    //   trueFlags  = N * baseRate * hitRate               (have it, flagged)
-    //   falseFlags = N * (1 - baseRate) * falseAlarmRate  (clean, flagged)
-    // answer = { posterior: trueFlags / (trueFlags + falseFlags) }
+  return {
+    support: [0, 1],
+    expectedValue: theta * onSuccess + (1 - theta) * onFailure,
+    probabilityStatement: problem.probabilityOf === 1 ? theta : 1 - theta,
+  };
+}
+
+export async function POST(req: Request) {
+  const problem = await req.json().catch(() => null);
+  if (!isRecord(problem) || typeof problem.type !== "string") {
+    return badRequest("expected a JSON problem with a `type` field");
+  }
+  if (!PROBLEM_TYPES.includes(problem.type as ProblemType)) {
+    return badRequest('problem type must be "syllogism", "plausibility", or "bernoulli"');
   }
 
-  if (problem.type === "bernoulli") {
-    // TODO(Challenge 2, step 4c): Station 2.4's Bernoulli read. From
-    // problem.theta, problem.payoffs, and problem.probabilityOf:
-    // answer = {
-    //   support: [0, 1],
-    //   expectedValue: theta * onSuccess + (1 - theta) * onFailure,
-    //   probabilityStatement: theta if probabilityOf is 1, else 1 - theta,
-    // }
-  }
+  const answer =
+    problem.type === "syllogism"
+      ? solveSyllogism(problem)
+      : problem.type === "plausibility"
+        ? solvePlausibility(problem)
+        : solveBernoulli(problem);
 
-  if (answer === undefined) {
-    // No TODO block claimed this problem yet. 501 keeps the service honest.
-    return notBuiltYet(2, "Reasoning & Uncertainty Service");
-  }
+  if (answer instanceof NextResponse) return answer;
 
-  // The memory step: overwrite this type's "latest" row so your /reasoning
-  // page can display the same problem and answer (see lib/reasoning-store).
-  await saveLatest(problem.type as ProblemType, problem, answer);
+  try {
+    await saveLatest(problem.type as ProblemType, problem, answer);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "could not save the latest answer";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 
   return NextResponse.json(answer);
 }

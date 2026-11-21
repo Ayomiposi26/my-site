@@ -1,4 +1,3 @@
-import { ComingSoon } from "@/components/ComingSoon";
 import { loadLatest } from "@/lib/reasoning-store";
 import { TwoWayTable } from "@/components/reasoning/TwoWayTable";
 import { BernoulliFourViews } from "@/components/reasoning/BernoulliFourViews";
@@ -12,10 +11,8 @@ export const metadata = { title: "Reasoning & Uncertainty Service" };
  * the answer your API gave moments earlier. Everything else on the page is
  * for humans: the tables and views that show WHY each number is right.
  *
- * The wiring ships with the template. Your job when you take on Challenge 2:
- * run supabase/reasoning.sql, build the decide route, then make this page
- * yours. The TODO(yours) comments mark the sentences to rewrite in your own
- * words; the build guide (course book, end of Lane 2) explains every part.
+ * The page reads the rows saved by /api/reasoning/decide. An empty table
+ * still renders, with a short note in place of each missing result.
  */
 
 // Freshness contract: without this line, Next.js may serve a cached copy of
@@ -27,28 +24,16 @@ export default async function ReasoningPage() {
   // The same rows your /api/reasoning/decide wrote via saveLatest().
   const { syllogism, plausibility, bernoulli } = await loadLatest();
 
-  // Until the first probe arrives (or before Supabase is wired up), the
-  // portfolio card keeps its honest placeholder.
-  if (!syllogism && !plausibility && !bernoulli) {
-    return (
-      <ComingSoon
-        lane={2}
-        title="Reasoning & Uncertainty"
-        description="A service that audits syllogisms, updates beliefs on base rates, and reads Bernoulli businesses. Built after Lane 2."
-      />
-    );
-  }
-
   return (
     <main className="mx-auto max-w-3xl px-6 py-14">
       <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">
         Lane 2 · live decision service
       </p>
       <h1 className="mt-3 text-4xl font-bold">My Reasoning &amp; Uncertainty Service</h1>
-      {/* TODO(yours): one sentence, your words, on what this service does. */}
       <p className="mt-4 max-w-prose text-muted">
-        Below is the most recent problem my API solved, for each of the three problem types it
-        speaks. Every number on this page comes from the same live data my API answered with.
+        This service checks whether an argument&apos;s shape is valid, updates a belief after a
+        flag, and reads a two-outcome payoff. Each section below is the latest problem that
+        type saved, and the graded numbers are the answers the API stored.
       </p>
 
       {/* ── Latest syllogism audit ─────────────────────────────────────── */}
@@ -61,8 +46,10 @@ export default async function ReasoningPage() {
               {String(syllogism.problem.rule?.then)}.
             </p>
             <p className="mt-1 text-muted">
-              {String(syllogism.problem.observation?.statement)}{" "}
-              {String(syllogism.problem.conclusion?.statement)}
+              Observation: {String(syllogism.problem.observation?.statement)}
+            </p>
+            <p className="mt-1 text-muted">
+              Conclusion: {String(syllogism.problem.conclusion?.statement)}
             </p>
             <p className="mt-3 text-lg">
               Verdict:{" "}
@@ -73,13 +60,10 @@ export default async function ReasoningPage() {
                 <span className="text-muted"> ({syllogism.answer.fallacy})</span>
               )}
             </p>
-            {/* TODO(yours): rewrite this explanation so it sounds like you (Station 2.1). */}
             <p className="mt-2 max-w-prose text-sm text-muted">
-              How the service decided: it ignores the story and reads only the shape of
-              the argument. The rule promises that the if-part brings the then-part, so
-              only two observations prove anything: the if-part being true, or the
-              then-part being false. Every other shape proves nothing, no matter how
-              believable the story feels.
+              The rule only lets me travel from the if-part to the then-part. Seeing the
+              if-part, or seeing that the then-part failed, settles the conclusion. Seeing
+              the then-part, or seeing that the if-part failed, does not.
             </p>
           </div>
         ) : (
@@ -107,8 +91,10 @@ export default async function ReasoningPage() {
                 {Number(plausibility.answer.posterior).toFixed(3)}
               </strong>
             </p>
-            {/* TODO(yours): one sentence a manager could read, e.g. what this
-                posterior means for the flagged case (Station 2.3). */}
+            <p className="mt-2 max-w-prose text-sm text-muted">
+              Of the cases the flag would catch, this is the share that actually have the
+              condition. A flag is not the same thing as the condition being common.
+            </p>
           </div>
         ) : (
           <p className="mt-3 text-muted">No plausibility probe yet.</p>
@@ -139,8 +125,10 @@ export default async function ReasoningPage() {
                 {Number(bernoulli.answer.probabilityStatement).toFixed(2)}
               </span>
             </p>
-            {/* TODO(yours): one sentence on what the expected payoff does and
-                does not promise (Station 2.4). */}
+            <p className="mt-2 max-w-prose text-sm text-muted">
+              The expected payoff is the long-run average of this bet, not the payoff of
+              the next single try.
+            </p>
           </div>
         ) : (
           <p className="mt-3 text-muted">No Bernoulli probe yet.</p>

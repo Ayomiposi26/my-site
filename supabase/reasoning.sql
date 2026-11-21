@@ -10,12 +10,20 @@
 -- stored so the database can read inside it": the whole problem and the
 -- whole answer fit in one column each, no matter their shape.
 
-create table public.reasoning_latest (
+-- Safe to re-run. The check keeps `type` to the three problem kinds.
+create table if not exists public.reasoning_latest (
   type text primary key,
   problem jsonb not null,
   answer jsonb not null,
   updated_at timestamptz not null default now()
 );
+
+alter table public.reasoning_latest
+  drop constraint if exists reasoning_latest_type_check;
+
+alter table public.reasoning_latest
+  add constraint reasoning_latest_type_check
+  check (type in ('syllogism', 'plausibility', 'bernoulli'));
 
 -- Row-level security, same idea as the guestbook: with it on and no
 -- policies, nobody can touch the table. Your site connects with the
@@ -24,12 +32,16 @@ create table public.reasoning_latest (
 -- and anyone may write (your API route saves each answer as it happens).
 alter table public.reasoning_latest enable row level security;
 
+drop policy if exists "anyone can read" on public.reasoning_latest;
+drop policy if exists "anyone can insert" on public.reasoning_latest;
+drop policy if exists "anyone can update" on public.reasoning_latest;
+
 create policy "anyone can read" on public.reasoning_latest
   for select using (true);
 create policy "anyone can insert" on public.reasoning_latest
   for insert with check (true);
 create policy "anyone can update" on public.reasoning_latest
-  for update using (true);
+  for update using (true) with check (true);
 
 -- The grant, same idea as the guestbook: the policies say which rows, the
 -- grant lets the "anon" role (the publishable key, no sign-in) use the

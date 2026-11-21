@@ -490,8 +490,9 @@ function gradeReasoning(problem, answer) {
   return null;
 }
 
-// Fixed sample problems, three per type. The real battery sends 30 with
-// fresh seeded parameters; formulas that pass these pass those.
+// Nine deterministic problems: all four syllogism forms, three plausibility
+// updates, and both Bernoulli outcomes (X = 0 and X = 1). The real battery
+// sends 30 with fresh seeded parameters; formulas that pass these pass those.
 const C2_PROBLEMS = [
   {
     probeId: "selfcheck-syllogism-1",
@@ -519,6 +520,19 @@ const C2_PROBLEMS = [
     rule: { if: "we cut the price", then: "unit sales rise" },
     observation: { statement: "We observe that unit sales rise.", asserts: "B" },
     conclusion: { statement: "Therefore, we cut the price.", asserts: "A" },
+  },
+  {
+    probeId: "selfcheck-syllogism-4",
+    type: "syllogism",
+    rule: { if: "the store is open", then: "the lights are on" },
+    observation: {
+      statement: "We observe that it is NOT the case that the store is open.",
+      asserts: "not-A",
+    },
+    conclusion: {
+      statement: "Therefore, it is not the case that the lights are on.",
+      asserts: "not-B",
+    },
   },
   {
     probeId: "selfcheck-plausibility-1",
@@ -564,15 +578,6 @@ const C2_PROBLEMS = [
     theta: 0.6,
     payoffs: { onSuccess: 80, onFailure: -30 },
     probabilityOf: 1,
-  },
-  {
-    probeId: "selfcheck-bernoulli-3",
-    type: "bernoulli",
-    scenario:
-      "X = 1 when the customer buys the upsell (probability theta = 0.22). Payoff is $150 when X = 1 and $-90 when X = 0.",
-    theta: 0.22,
-    payoffs: { onSuccess: 150, onFailure: -90 },
-    probabilityOf: 0,
   },
 ];
 
