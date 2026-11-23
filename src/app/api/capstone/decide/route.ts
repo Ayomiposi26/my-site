@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import type { CapstoneProbe } from "@/lib/capstone-helpers";
-import { solveCapstone, type CapstoneProblem, type DagNode } from "@/lib/capstone-simulate";
+import type { CapstoneAnswer, CapstoneProbe, DagNode, Row } from "@/lib/capstone-helpers";
+import { solveCapstone, type CapstoneProblem } from "@/lib/capstone-simulate";
 import { saveLatest } from "@/lib/capstone-store";
 
 /**
@@ -24,7 +24,61 @@ function finiteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function parseProblem(body: unknown): CapstoneProblem | NextResponse {
+/** The fields simulateRun() reads, taken from an already validated probe. */
+function simulationProblem(probe: CapstoneProbe): CapstoneProblem {
+  const periodLength = probe.scenario.params.periodLength;
+  const runs = probe.scenario.params.runs;
+  if (typeof periodLength !== "number" || typeof runs !== "number") {
+    throw new Error("scenario.params.periodLength and runs must be numbers");
+  }
+  return {
+    type: probe.type,
+    domain: probe.domain,
+    candidates: probe.candidates,
+    scenario: {
+      params: {
+        reader: String(probe.scenario.params.reader ?? "the reader"),
+        unit: String(probe.scenario.params.unit ?? "units"),
+        periodName: String(probe.scenario.params.periodName ?? "period"),
+        periodLength,
+        periodUnit: String(probe.scenario.params.periodUnit ?? "days"),
+        runs,
+      },
+    },
+    limit: { atLeast: probe.limit.atLeast, maxChance: probe.limit.maxChance },
+    dag: {
+      nodes: probe.dag.nodes.map((node) => {
+        const parsed: CapstoneProblem["dag"]["nodes"][number] = {
+          id: node.id,
+          repeat: node.repeat === "weekly" ? "daily" : node.repeat,
+        };
+        if (node.option) parsed.option = node.option;
+        if (node.compute) parsed.compute = node.compute;
+        if (node.draw) parsed.draw = node.draw;
+        return parsed;
+      }),
+      edges: probe.dag.edges,
+    },
+  };
+}
+
+function parseHistory(value: unknown): Row[] | null {
+  if (!Array.isArray(value)) return null;
+  const rows: Row[] = [];
+  for (const row of value) {
+    if (!isRecord(row)) return null;
+    const parsed: Row = {};
+    for (const [key, cell] of Object.entries(row)) {
+      if (typeof cell === "string") parsed[key] = cell;
+      else if (typeof cell === "number" && Number.isFinite(cell)) parsed[key] = cell;
+      else return null;
+    }
+    rows.push(parsed);
+  }
+  return rows;
+}
+
+function parseProblem(body: unknown): CapstoneProbe | NextResponse {
   if (!isRecord(body)) return badRequest("expected a JSON capstone problem");
   if (body.type !== "capstone-decision") {
     return badRequest('problem type must be "capstone-decision"');
@@ -71,12 +125,25 @@ function parseProblem(body: unknown): CapstoneProblem | NextResponse {
     if (!isRecord(node) || typeof node.id !== "string") {
       return badRequest("each dag node needs an id");
     }
-    if (node.repeat !== "once" && node.repeat !== "daily" && node.repeat !== "result") {
+    if (typeof node.plain !== "string") {
+      return badRequest(`node ${node.id} needs a plain description`);
+    }
+    if (
+      node.repeat !== "once" &&
+      node.repeat !== "daily" &&
+      node.repeat !== "weekly" &&
+      node.repeat !== "result"
+    ) {
       return badRequest(`node ${node.id} has an unknown repeat`);
     }
-    const parsed: DagNode = { id: node.id, repeat: node.repeat };
+    const parsed: DagNode = { id: node.id, plain: node.plain, repeat: node.repeat };
     if (typeof node.option === "string") parsed.option = node.option;
     if (typeof node.compute === "string") parsed.compute = node.compute;
+    if (node.basedOn !== undefined) {
+      const basedOn = finiteNumber(node.basedOn);
+      if (basedOn === null) return badRequest(`node ${node.id} has a basedOn that is not a number`);
+      parsed.basedOn = basedOn;
+    }
     if (node.repeat !== "result") {
       if (!isRecord(node.draw)) return badRequest(`node ${node.id} needs a draw`);
       const sd = finiteNumber(node.draw.sd);
@@ -98,43 +165,65 @@ function parseProblem(body: unknown): CapstoneProblem | NextResponse {
     edges.push([edge[0], edge[1]]);
   }
 
+  const history = parseHistory(body.history);
+  if (!history) return badRequest("history must be a list of rows");
+  if (typeof body.probeId !== "string") return badRequest("problem needs a probeId");
+  const scenario = body.scenario;
+  if (typeof scenario.narrative !== "string") return badRequest("scenario.narrative must be text");
+  if (typeof scenario.decisionRule !== "string") return badRequest("scenario.decisionRule must be text");
+  if (!isRecord(body.limit) || typeof body.limit.plain !== "string") {
+    return badRequest("limit.plain must be text");
+  }
+
+  const scenarioParams: Record<string, number | string> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string") scenarioParams[key] = value;
+    else if (typeof value === "number" && Number.isFinite(value)) scenarioParams[key] = value;
+  }
+  scenarioParams.periodLength = periodLength;
+  scenarioParams.runs = runs;
+
   return {
+    probeId: body.probeId,
     type: "capstone-decision",
     domain: "staffing",
-    candidates,
+    yours: body.yours === true,
     scenario: {
-      params: {
-        reader: typeof params.reader === "string" ? params.reader : "the reader",
-        unit: typeof params.unit === "string" ? params.unit : "units",
-        periodName: typeof params.periodName === "string" ? params.periodName : "period",
-        periodLength,
-        periodUnit: typeof params.periodUnit === "string" ? params.periodUnit : "days",
-        runs,
-      },
+      narrative: scenario.narrative,
+      params: scenarioParams,
+      decisionRule: scenario.decisionRule,
     },
-    limit: { atLeast, maxChance },
+    history,
+    candidates,
+    limit: { atLeast, maxChance, plain: body.limit.plain },
     dag: { nodes, edges },
   };
 }
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const parsed = parseProblem(body);
-  if (parsed instanceof NextResponse) return parsed;
+  const probe = parseProblem(await req.json().catch(() => null));
+  if (probe instanceof NextResponse) return probe;
 
   let answer;
   try {
-    answer = solveCapstone(parsed);
+    answer = solveCapstone(simulationProblem(probe));
   } catch (err) {
     const message = err instanceof Error ? err.message : "the recipe could not be simulated";
     return badRequest(message);
   }
 
+  const saved: CapstoneAnswer = {
+    action: answer.action,
+    outcomes: answer.outcomes,
+    chanceActionBeatsOther: answer.chanceActionBeatsOther,
+    reasoning: answer.reasoning,
+  };
+
   // Only your own problem is saved, so your report always shows it.
   // Practice problems are answered and then discarded.
-  if (isRecord(body) && body.yours === true) {
+  if (probe.yours === true) {
     try {
-      await saveLatest(body as CapstoneProbe, answer);
+      await saveLatest(probe, saved);
     } catch (err) {
       return NextResponse.json(
         { error: `could not save your problem: ${err instanceof Error ? err.message : String(err)}` },
