@@ -49,8 +49,7 @@ export default function HomePage() {
       <section className="mt-14">
         <h2 className="text-2xl font-bold">A portfolio of decision services</h2>
         <p className="mt-2 max-w-prose text-muted">
-          Over the semester this site grows one live decision service per lane. Here&apos;s
-          what&apos;s coming:
+          Explore the decision tools I built during my MBA.
         </p>
         <ul className="mt-6 grid gap-4 sm:grid-cols-2">
           {SERVICES.map((s) => (

@@ -71,11 +71,11 @@ export function CandidateOutcomes({
         <span>{money(Math.exp(hi))}</span>
       </div>
       <figcaption className="mt-3 text-sm text-muted">
-        Each row is one candidate stake, simulated thousands of times. The thin bar covers the middle
-        90% of simulated investors, the thick bar the middle 50%, and the dark tick is the typical
-        investor (the median). The recommended stake is the row whose tick sits farthest to the
-        right. Larger stakes stretch the bars wider in both directions: a few investors do very well,
-        and the typical one does worse.
+        These results support staking {Math.round(recommended * 100)}% each year: that row&apos;s
+        typical investor, the dark tick, finishes farthest to the right. Each row is one candidate
+        stake, simulated thousands of times. The thin bar covers the middle 90% of simulated
+        investors and the thick bar the middle 50%. Larger stakes stretch the bars wider in both
+        directions: a few investors do very well, and the typical one does worse.
       </figcaption>
     </figure>
   );

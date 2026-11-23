@@ -55,6 +55,26 @@ export default async function CapstonePage() {
     patrick: Number(row.patrick),
     cars: Number(row.cars),
   }));
+  const daysThere = (shopId: string) => {
+    const shop = Number(shopId.split("-").pop());
+    return rows.filter((row) => row.shop === shop && row.patrick === 1).length;
+  };
+  const other = probe.candidates.find((candidate) => candidate.id !== answer.action);
+  const otherOutcome = other ? answer.outcomes[other.id] : undefined;
+  const periodLength = Number(params.periodLength);
+  const periodUnit = String(params.periodUnit);
+  const limitShare = Math.round(probe.limit.maxChance * 100);
+  const otherMissesLimit =
+    otherOutcome !== undefined && otherOutcome.chanceShort > probe.limit.maxChance;
+  const chosenMeetsLimit = chosenOutcome.chanceShort <= probe.limit.maxChance;
+  const daysByCandidate = probe.candidates.map((candidate) => ({
+    label: candidate.label,
+    days: daysThere(candidate.id),
+  }));
+  const thinner = [...daysByCandidate].sort((a, b) => a.days - b.days)[0];
+  const thinnerIsUnique =
+    thinner !== undefined &&
+    daysByCandidate.filter((entry) => entry.days === thinner.days).length === 1;
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-14">
@@ -68,11 +88,10 @@ export default async function CapstonePage() {
       <section className="mt-10">
         <h2 className="text-2xl font-bold">The decision</h2>
         <p data-capstone="recommendation" className="mt-3 max-w-prose">
-          {reader}, work at {chosen.label} next quarter because the two shops
-          together are projected to miss your {count(probe.limit.atLeast)}-car
-          goal in about {Math.round(chosenOutcome.chanceShort * 100)} out of 100
-          quarters, within your limit of {Math.round(probe.limit.maxChance * 100)}{" "}
-          out of 100.
+          {reader}, work at {chosen.label} next {periodName}. The two shops
+          together miss your {count(probe.limit.atLeast)}-car goal in{" "}
+          {inHundred(chosenOutcome.chanceShort)} simulated {periodName}s, inside
+          your limit of {Math.round(probe.limit.maxChance * 100)} in 100.
         </p>
         <ul className="mt-4 space-y-1 text-lg">
           <li>
@@ -101,14 +120,18 @@ export default async function CapstonePage() {
         <h2 className="text-2xl font-bold">The history</h2>
         <HistoryChart rows={rows} reader={reader} />
         <p className="mt-4 max-w-prose text-muted">
-          We have records from 20 days when you worked at Shop 1 and only 4 days
-          when you worked at Shop 2. That gives us less information about how
-          Shop 2 does when you work there.
+          Filled dots are days {reader} was there:{" "}
+          {daysByCandidate.map((entry) => `${entry.days} at ${entry.label}`).join(", ")}.{" "}
+          {thinner && thinnerIsUnique
+            ? `${thinner.label} has fewer of those days, so its result is less certain.`
+            : ""}
         </p>
       </section>
 
       <section className="mt-12">
-        <h2 className="text-2xl font-bold">The two shops</h2>
+        <h2 className="text-2xl font-bold">
+          Work at {chosen.label}: it stays inside the {count(probe.limit.atLeast)}-car target
+        </h2>
         <ul className="mt-3 space-y-2">
           {probe.candidates.map((candidate) => {
             const outcome = answer.outcomes[candidate.id];
@@ -116,17 +139,23 @@ export default async function CapstonePage() {
             return (
               <li key={candidate.id}>
                 <span className="font-medium">{candidate.label}.</span> Typical{" "}
-                {periodName} {count(outcome.typical)} {unit}, likely range{" "}
-                {count(outcome.low)} to {count(outcome.high)}, falling short in{" "}
-                {inHundred(outcome.chanceShort)} simulated {periodName}s.
+                {periodName}: {count(outcome.typical)} {unit}. Likely range:{" "}
+                {count(outcome.low)} to {count(outcome.high)}. Falls short of{" "}
+                {count(probe.limit.atLeast)} in {inHundred(outcome.chanceShort)}{" "}
+                simulated {periodName}s.
               </li>
             );
           })}
         </ul>
-        <p className="mt-3 text-muted">
-          {reader} can accept falling short in{" "}
-          {Math.round(probe.limit.maxChance * 100)} of 100 {periodName}s. In the
-          same simulated {periodName}, {chosen.label} came out ahead in{" "}
+        <p className="mt-3 max-w-prose text-muted">
+          {reader} can accept falling short in {limitShare} of 100 {periodName}s.
+          {other && otherOutcome && chosenMeetsLimit && otherMissesLimit
+            ? ` ${other.label} falls short in ${inHundred(otherOutcome.chanceShort)}, past that limit. ${chosen.label} falls short in ${inHundred(chosenOutcome.chanceShort)}, so that is the shop to work at.`
+            : ""}
+          {other && otherOutcome && otherOutcome.typical > chosenOutcome.typical
+            ? ` ${other.label}'s typical ${periodName} is higher (${count(otherOutcome.typical)} ${unit}, against ${count(chosenOutcome.typical)}), and it still misses the limit too often.`
+            : ""}{" "}
+          Across the same simulated {periodName}s, {chosen.label} finished higher in{" "}
           {inHundred(answer.chanceActionBeatsOther)} runs.
         </p>
         <OutcomeChart
@@ -156,14 +185,15 @@ export default async function CapstonePage() {
           ))}
         </ol>
         <p className="mt-4 max-w-prose text-muted">
-          We compared two versions of the same 60-day quarter. In one, you
-          worked at Shop 1 every day. In the other, you worked at Shop 2 every
-          day. For each version, we added up how many cars both shops fixed.
+          The comparison uses two versions of the same {periodLength} {periodUnit}{" "}
+          {periodName}. In one, {reader} works at {probe.candidates[0]?.label} every
+          day. In the other, {reader} works at {probe.candidates[1]?.label} every
+          day. Each version adds up the cars both shops fix.
         </p>
       </section>
 
       <section className="mt-12">
-        <h2 className="text-2xl font-bold">How sure</h2>
+        <h2 className="text-2xl font-bold">How sure this is</h2>
         <p data-capstone="uncertainty" className="mt-3 max-w-prose text-muted">
           With you at {chosen.label}, the two shops together fixed between{" "}
           {count(chosenOutcome.low)} and {count(chosenOutcome.high)} cars in

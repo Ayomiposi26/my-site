@@ -106,7 +106,9 @@ export default async function SimulatorPage() {
       </section>
 
       <section className="mt-12">
-        <h2 className="text-2xl font-bold">Every stake that was tried</h2>
+        <h2 className="text-2xl font-bold">
+          Stake {stakePct}% each year: the typical result is the highest
+        </h2>
         <CandidateOutcomes candidates={candidates} buyIn={buyIn} recommended={fraction} />
       </section>
 
